@@ -122,7 +122,7 @@ def test_array_spec(
     array.attrs.put(attributes)
     spec = ArraySpec.from_zarr(array)
 
-    assert spec.zarr_version == array.metadata.zarr_format
+    assert spec.zarr_format == array.metadata.zarr_format
     assert spec.dtype == array.dtype
     assert spec.attributes == array.attrs
     assert spec.chunks == array.chunks
@@ -146,7 +146,7 @@ def test_array_spec(
 
     array2 = spec.to_zarr(store, "foo2")
 
-    assert spec.zarr_version == array2.metadata.zarr_format
+    assert spec.zarr_format == array2.metadata.zarr_format
     assert spec.dtype == array2.dtype
     assert spec.attributes == array2.attrs
     assert spec.chunks == array2.chunks

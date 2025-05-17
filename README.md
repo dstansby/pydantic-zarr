@@ -2,7 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/pydantic-zarr)](https://pypi.python.org/pypi/pydantic-zarr)
 
-[Pydantic](https://docs.pydantic.dev/1.10/) models for [Zarr](https://zarr.readthedocs.io/en/stable/index.html).
+[Pydantic](https://docs.pydantic.dev/latest/) models for [Zarr](https://zarr.readthedocs.io/en/stable/index.html).
 
 ## Installation
 
@@ -28,11 +28,11 @@ spec = GroupSpec.from_zarr(group)
 print(spec.model_dump())
 """
 {
-    'zarr_version': 2,
+    'zarr_format': 2,
     'attributes': {},
     'members': {
         'bar': {
-            'zarr_version': 2,
+            'zarr_format': 2,
             'attributes': {'metadata': 'hello'},
             'shape': (10,),
             'chunks': (10,),
