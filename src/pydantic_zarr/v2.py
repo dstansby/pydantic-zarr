@@ -20,7 +20,7 @@ import numpy as np
 import numpy.typing as npt
 import zarr
 from numcodecs.abc import Codec
-from pydantic import AfterValidator, model_validator
+from pydantic import AfterValidator, Field, model_validator
 from pydantic.functional_validators import BeforeValidator
 from zarr.abc.store import Store
 from zarr.core.sync_group import get_node
@@ -174,7 +174,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
     dtype: DtypeStr
     fill_value: int | float | None = 0
     order: Literal["C", "F"] = "C"
-    filters: list[CodecDict] | None = None
+    filters: list[CodecDict] = Field(default=[])
     dimension_separator: Annotated[
         Literal["/", "."], BeforeValidator(parse_dimension_separator)
     ] = "/"
@@ -247,7 +247,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         >>> import numpy as np
         >>> x = ArraySpec.from_array(np.arange(10))
         >>> x
-        ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=None, dimension_separator='/', compressor=None)
+        ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=[], dimension_separator='/', compressor=None)
 
 
         """
@@ -321,7 +321,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         >>> from pydantic_zarr.v2 import ArraySpec
         >>> x = zarr.create((10,10))
         >>> ArraySpec.from_zarr(x)
-        ArraySpec(zarr_version=2, attributes={}, shape=(10, 10), chunks=(10, 10), dtype='<f8', fill_value=0.0, order='C', filters=None, dimension_separator='.', compressor={'id': 'blosc', 'cname': 'lz4', 'clevel': 5, 'shuffle': 1, 'blocksize': 0})
+        ArraySpec(zarr_version=2, attributes={}, shape=(10, 10), chunks=(10, 10), dtype='<f8', fill_value=0.0, order='C', filters=[], dimension_separator='.', compressor={'id': 'blosc', 'cname': 'lz4', 'clevel': 5, 'shuffle': 1, 'blocksize': 0})
 
         """
         return cls(
@@ -334,7 +334,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
             order=array.order,
             filters=array.filters,
             dimension_separator=array.metadata.dimension_separator,
-            compressor=array.compressors[0].get_config(),
+            compressor=array.compressors[0].get_config() if len(array.compressors) else None,
             attributes=array.attrs.asdict(),
         )
 
@@ -717,7 +717,7 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
             '': GroupSpec(attributes={'foo': 10}, members=None),
             '/a': ArraySpec.from_array(np.arange(10))}
         >>> GroupSpec.from_flat(flat)
-        GroupSpec(zarr_version=2, attributes={'foo': 10}, members={'a': ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=None, dimension_separator='/', compressor=None)})
+        GroupSpec(zarr_version=2, attributes={'foo': 10}, members={'a': ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=[], dimension_separator='/', compressor=None)})
         """
         from_flated = from_flat_group(data)
         return cls(**from_flated.model_dump())
@@ -895,7 +895,7 @@ def from_flat(data: dict[str, ArraySpec | GroupSpec]) -> ArraySpec | GroupSpec:
     ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=[], dimension_separator='/', compressor=None)
     >>> tree = {'/foo': ArraySpec.from_array(np.arange(10))}
     >>> from_flat(tree) # note that an implicit Group is created
-    GroupSpec(zarr_version=2, attributes={}, members={'foo': ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=None, dimension_separator='/', compressor=None)})
+    GroupSpec(zarr_version=2, attributes={}, members={'foo': ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=[], dimension_separator='/', compressor=None)})
     """
 
     # minimal check that the keys are valid
@@ -934,7 +934,7 @@ def from_flat_group(data: dict[str, ArraySpec | GroupSpec]) -> GroupSpec:
     >>> import numpy as np
     >>> tree = {'/foo': ArraySpec.from_array(np.arange(10))}
     >>> from_flat_group(tree) # note that an implicit Group is created
-    GroupSpec(zarr_version=2, attributes={}, members={'foo': ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=None, dimension_separator='/', compressor=None)})
+    GroupSpec(zarr_version=2, attributes={}, members={'foo': ArraySpec(zarr_version=2, attributes={}, shape=(10,), chunks=(10,), dtype='<i8', fill_value=0, order='C', filters=[], dimension_separator='/', compressor=None)})
     """
     root_name = ""
     sep = "/"
@@ -1034,13 +1034,13 @@ def auto_compresser(data: Any) -> Codec | None:
     return None
 
 
-def auto_filters(data: Any) -> list[Codec] | None:
+def auto_filters(data: Any) -> list[Codec]:
     """
     Guess filters from an input with a `filters` attribute, returning `None` otherwise.
     """
     if hasattr(data, "filters"):
         return data.filters
-    return None
+    return []
 
 
 def auto_order(data: Any) -> Literal["C", "F"]:
