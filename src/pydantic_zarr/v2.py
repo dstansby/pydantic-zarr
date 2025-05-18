@@ -209,7 +209,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         attributes: Literal["auto"] | TAttr = "auto",
         fill_value: Literal["auto"] | float | None = "auto",
         order: Literal["auto", "C", "F"] = "auto",
-        filters: Literal["auto"] | list[CodecDict] = "auto",
+        filters: Literal["auto"] | list[CodecDict] | None = "auto",
         dimension_separator: Literal["auto", "/", "."] = "auto",
         compressor: Literal["auto"] | CodecDict | None = "auto",
     ) -> Self:
@@ -238,7 +238,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
             The fill value for this array. Either "auto" or FillValue. The default is "auto", which means that `array.fill_value` will be used if that attribute exists, with a fallback value of 0.
         compressor: "auto" | CodecDict | None, default = "auto"
             The compressor for this `ArraySpec`. One of "auto", a JSON-serializable representation of a compression codec, or `None`. The default is "auto", which means that `array.compressor` attribute will be used, with a fallback value of `None`.
-        filters: "auto" | List[CodecDict], default = "auto"
+        filters: "auto" | List[CodecDict] | None, default = "auto"
             The filters for this `ArraySpec`. One of "auto", a list of JSON-serializable representations of compression codec, or `None`. The default is "auto", which means that the `array.filters` attribute will be
             used, with a fallback value of `None`.
         dimension_separator: "auto" | "." | "/", default = "auto"
