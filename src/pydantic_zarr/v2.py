@@ -26,17 +26,17 @@ from zarr.abc.store import Store
 from zarr.core.sync_group import get_node
 from zarr.errors import ContainsArrayError, ContainsGroupError
 
-from pydantic_zarr.core import IncEx, StrictBase, ensure_key_no_path, model_like, stringify_dtype
+from pydantic_zarr.core import (
+    IncEx,
+    StrictBase,
+    _contains_array,
+    ensure_key_no_path,
+    model_like,
+    stringify_dtype,
+)
 
 TAttr = TypeVar("TAttr", bound=Mapping[str, Any])
 TItem = TypeVar("TItem", bound=Union["GroupSpec", "ArraySpec"])
-
-
-def _contains_array(store: Store, path: str) -> bool:
-    try:
-        return isinstance(get_node(store, path, zarr_format=2), zarr.Array)
-    except FileNotFoundError:
-        return False
 
 
 def _contains_group(store: Store, path: str) -> bool:
@@ -358,7 +358,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
             spec_dict["compressor"] = numcodecs.get_codec(spec_dict["compressor"])
         if self.filters is not None:
             spec_dict["filters"] = [numcodecs.get_codec(f) for f in spec_dict["filters"]]
-        if _contains_array(store, path):
+        if _contains_array(store, path, zarr_format=2):
             extant_array = zarr.open_array(store, path=path, zarr_format=2)
 
             if not self.like(extant_array):
@@ -558,7 +558,7 @@ class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
                     # then just return the extant group
                     return extant_group
 
-        elif _contains_array(store, path) and not overwrite:
+        elif _contains_array(store, path, zarr_format=2) and not overwrite:
             msg = (
                 f"An array already exists at path {path}. "
                 "Call to_zarr with overwrite=True to overwrite the array."
