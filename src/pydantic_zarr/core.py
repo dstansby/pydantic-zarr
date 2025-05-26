@@ -9,7 +9,10 @@ from typing import (
 
 import numpy as np
 import numpy.typing as npt
+import zarr
 from pydantic import BaseModel, ConfigDict
+from zarr.abc.store import Store
+from zarr.core.sync_group import get_node
 
 IncEx: TypeAlias = set[int] | set[str] | dict[int, Any] | dict[str, Any] | None
 
@@ -70,3 +73,10 @@ def model_like(a: BaseModel, b: BaseModel, exclude: IncEx = None, include: IncEx
     b_dict = b.model_dump(exclude=exclude, include=include)
 
     return a_dict == b_dict
+
+
+def _contains_array(store: Store, path: str, *, zarr_format: Literal[2, 3]) -> bool:
+    try:
+        return isinstance(get_node(store, path, zarr_format=zarr_format), zarr.Array)
+    except FileNotFoundError:
+        return False

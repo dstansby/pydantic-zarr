@@ -15,15 +15,16 @@ from typing import (
 
 import numpy as np
 import numpy.typing as npt
+import zarr
 from pydantic import BeforeValidator
+from zarr.errors import ContainsArrayError
 
-from pydantic_zarr.core import StrictBase
+from pydantic_zarr.core import IncEx, StrictBase, _contains_array, model_like
 from pydantic_zarr.v2 import stringify_dtype
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    import zarr
     from zarr.abc.store import Store
 
 TAttr = TypeVar("TAttr", bound=dict[str, Any])
@@ -240,7 +241,7 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
             dimension_names=array.metadata.dimension_names,
         )
 
-    def to_zarr(self, store: Store, path: str, overwrite: bool = False) -> zarr.Array:
+    def to_zarr(self, store: Store, path: str, *, overwrite: bool = False) -> zarr.Array:
         """
         Serialize an ArraySpec to a zarr array at a specific path in a zarr store.
 
@@ -260,7 +261,94 @@ class ArraySpec(NodeSpec, Generic[TAttr]):
         A zarr array that is structurally identical to the ArraySpec.
         This operation will create metadata documents in the store.
         """
-        raise NotImplementedError
+        spec_dict = self.model_dump(exclude={"node_type": True})
+        attrs = spec_dict.pop("attributes")
+
+        spec_dict["dtype"] = spec_dict.pop("data_type")
+        spec_dict["chunk_shape"] = spec_dict.pop("chunk_grid")["configuration"]["chunk_shape"]
+        spec_dict["codecs"] = ({"name": "bytes"},) + tuple(c for c in spec_dict["codecs"])
+        storage_transformers = spec_dict.pop("storage_transformers")
+        if len(storage_transformers):
+            raise NotImplementedError("zarr-python does not support storage transformers")
+        if _contains_array(store, path, zarr_format=3):
+            extant_array = zarr.open_array(store, path=path, zarr_format=3)
+
+            if not self.like(extant_array):
+                if not overwrite:
+                    raise ContainsArrayError(store, path)
+            else:
+                if not overwrite:
+                    # extant_array is read-only, so we make a new array handle that
+                    # takes **kwargs
+                    return zarr.open_array(
+                        store=extant_array.store, path=extant_array.path, zarr_format=2
+                    )
+        spec_dict["zarr_format"] = spec_dict.pop("zarr_version", 3)
+        result = zarr.create(store=store, path=path, overwrite=overwrite, **spec_dict)
+        result.attrs.put(attrs)
+        return result
+
+    def like(
+        self,
+        other: ArraySpec | zarr.Array,
+        *,
+        include: IncEx = None,
+        exclude: IncEx = None,
+    ) -> bool:
+        """
+        Compare a `GroupSpec` to another `GroupSpec` or a `zarr.Group`, parameterized over the
+        fields to exclude or include in the comparison. Models are first converted to dict via the
+        `model_dump` method of `pydantic.BaseModel`, then compared with the `==` operator.
+
+        Parameters
+        ----------
+        other: GroupSpec | zarr.Group
+            The group (model or actual) to compare with. If other is a `zarr.Group`, it will be
+            converted to a `GroupSpec`.
+        include: IncEx, default = None
+            A specification of fields to include in the comparison. The default is `None`,
+            which means that all fields will be included. See the documentation of
+            `pydantic.BaseModel.model_dump` for more details.
+        exclude: IncEx, default = None
+            A specification of fields to exclude from the comparison. The default is `None`,
+            which means that no fields will be excluded. See the documentation of
+            `pydantic.BaseModel.model_dump` for more details.
+
+        Returns
+        -------
+        bool
+            `True` if the two models have identical fields, `False` otherwise.
+
+        Examples
+        --------
+        >>> import zarr
+        >>> from pydantic_zarr.v3 import GroupSpec
+        >>> import numpy as np
+        >>> z1 = zarr.group(path='z1')
+        >>> z1a = z1.array(name='foo', data=np.arange(10))
+        >>> z1_model = GroupSpec.from_zarr(z1)
+        >>> print(z1_model.like(z1_model)) # it is like itself
+        True
+        >>> print(z1_model.like(z1))
+        True
+        >>> z2 = zarr.group(path='z2')
+        >>> z2a = z2.array(name='foo', data=np.arange(10))
+        >>> print(z1_model.like(z2))
+        True
+        >>> z2.attrs.put({'foo' : 100}) # now they have different attributes
+        >>> print(z1_model.like(z2))
+        False
+        >>> print(z1_model.like(z2, exclude={'attributes'}))
+        True
+        """
+
+        other_parsed: ArraySpec
+        if isinstance(other, zarr.Array):
+            other_parsed = ArraySpec.from_zarr(other)
+        else:
+            other_parsed = other
+
+        return model_like(self, other_parsed, include=include, exclude=exclude)
 
 
 class GroupSpec(NodeSpec, Generic[TAttr, TItem]):
